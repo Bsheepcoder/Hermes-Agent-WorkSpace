@@ -2,7 +2,13 @@
   {
     "date": "2026-04-15",
     "topic": "孩子说话晚？日常对话就是最好的训练",
-    "keywords": ["语言发育迟缓", "日常对话技巧", "家庭语言训练", "言语治疗", "说话晚"],
+    "keywords": [
+      "语言发育迟缓",
+      "日常对话技巧",
+      "家庭语言训练",
+      "言语治疗",
+      "说话晚"
+    ],
     "cards": [
       "0415-language-1.html",
       "0415-language-2.html",
@@ -23,7 +29,13 @@
   {
     "date": "2026-04-15",
     "topic": "家里就是感统训练场：5个日常游戏帮助孩子感觉统合发展",
-    "keywords": ["感觉统合", "感统训练", "家庭康复", "感统失调", "居家游戏"],
+    "keywords": [
+      "感觉统合",
+      "感统训练",
+      "家庭康复",
+      "感统失调",
+      "居家游戏"
+    ],
     "cards": [
       "0415-sensory-1.html",
       "0415-sensory-2.html",
@@ -41,6 +53,33 @@
       "c7B1dkigWiWaY826_njoEyoWmfUFMzsSuxwxWA1Pg9LkMTVPV_5onY7aBGyYG8ZG"
     ],
     "draft_media_id": "c7B1dkigWiWaY826_njoE21Miux8pZ3MZFwlI_MI9v7QPiDWt1Kez555rjmfpZSo",
+    "status": "published"
+  },
+  {
+    "date": "2026-04-16",
+    "topic": "小手灵巧未来更巧：6个日常游戏提升孩子精细动作",
+    "keywords": [
+      "精细动作",
+      "手功能发育",
+      "家庭训练游戏",
+      "生活自理能力",
+      "发育里程碑"
+    ],
+    "cards": [
+      "0416-finemotor-1.html",
+      "0416-finemotor-2.html",
+      "0416-finemotor-3.html",
+      "0416-finemotor-4.html",
+      "0416-finemotor-5.html"
+    ],
+    "media_ids": [
+      "c7B1dkigWiWaY826_njoEwHUANRJR2ahZeuicy_9N9eV-_g5dPWhghOSTLTSJlJo",
+      "c7B1dkigWiWaY826_njoEz0mJDAbxkbyoCxxCgZHyDSC8nNCPcDvLgW9j34_nt5U",
+      "c7B1dkigWiWaY826_njoE3m864HZ__b4bcUnVSghVbUYPZ4KQrY1fYTthlRTD1pT",
+      "c7B1dkigWiWaY826_njoExPHy4ztHwo9myyNXoPMj_mh9mWqqvVaw2qOcEdhFwCP",
+      "c7B1dkigWiWaY826_njoE1XGH3Tfy9Vn6z-VDPA0c6ZXHZiKy6Ilb2qydDqHHQpi"
+    ],
+    "draft_media_id": "c7B1dkigWiWaY826_njoEwpNf5pTw9QLRVUg32f-rsNlwaqEQWuRaPVkzKsHZ9kg",
     "status": "published"
   }
 ]
