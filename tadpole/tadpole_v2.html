@@ -1,0 +1,1559 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>水墨动画 — Tadpole v2 Step 1</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #1a1a1a; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1280" height="720"></canvas>
+<script>
+// ============================================================
+// 水墨动画引擎 v2 — Step 1: 墨迹引擎 + 宣纸纹理 + 基础框架
+// ============================================================
+
+const W = 1280, H = 720;
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+// ============================================================
+// 一、噪声与工具函数
+// ============================================================
+
+// --- 经典 Perlin 噪声（2D，紧凑实现）---
+const PERM = new Uint8Array(512);
+const GRAD = [[1,1],[-1,1],[1,-1],[-1,-1],[1,0],[-1,0],[0,1],[0,-1]];
+
+function initNoise(seed) {
+  // 用固定种子初始化排列表
+  const p = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) p[i] = i;
+  let s = seed | 0;
+  for (let i = 255; i > 0; i--) {
+    s = (s * 16807 + 0) % 2147483647; // 线性同余
+    const j = s % (i + 1);
+    const tmp = p[i]; p[i] = p[j]; p[j] = tmp;
+  }
+  for (let i = 0; i < 512; i++) PERM[i] = p[i & 255];
+}
+
+function fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+function dot2(g, x, y) { return g[0] * x + g[1] * y; }
+
+function noise(x, y) {
+  const X = Math.floor(x) & 255, Y = Math.floor(y) & 255;
+  const xf = x - Math.floor(x), yf = y - Math.floor(y);
+  const u = fade(xf), v = fade(yf);
+  const aa = PERM[PERM[X] + Y] & 7;
+  const ab = PERM[PERM[X] + Y + 1] & 7;
+  const ba = PERM[PERM[X + 1] + Y] & 7;
+  const bb = PERM[PERM[X + 1] + Y + 1] & 7;
+  const x1 = lerp(dot2(GRAD[aa], xf, yf), dot2(GRAD[ba], xf - 1, yf), u);
+  const x2 = lerp(dot2(GRAD[ab], xf, yf - 1), dot2(GRAD[bb], xf - 1, yf - 1), u);
+  return lerp(x1, x2, v);
+}
+
+// 分形噪声：多层叠加
+function fbm(x, y, octaves) {
+  let val = 0, amp = 0.5, freq = 1;
+  for (let i = 0; i < octaves; i++) {
+    val += amp * noise(x * freq, y * freq);
+    amp *= 0.5; freq *= 2;
+  }
+  return val;
+}
+
+// --- 确定性伪随机（固定种子）---
+let _rngState = 42;
+function seedRandom(s) { _rngState = s | 0; }
+function sRand() {
+  _rngState = (_rngState * 16807 + 12345) % 2147483647;
+  return (_rngState & 0x7fffffff) / 0x7fffffff;
+}
+
+// --- 通用工具函数 ---
+function lerp(a, b, t) { return a + (b - a) * t; }
+function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+function smoothstep(edge0, edge1, x) {
+  const t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
+  return t * t * (3 - 2 * t);
+}
+function easeInOutCubic(t) { return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3) / 2; }
+function easeOutQuad(t) { return 1 - (1 - t) * (1 - t); }
+function easeInQuad(t) { return t * t; }
+function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+
+// ============================================================
+// 二、墨迹引擎（核心视觉身份）
+// ============================================================
+
+/**
+ * inkStroke — 沿路径绘制毛笔笔触
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {Array<{x:number,y:number}>} points — 路径点
+ * @param {number} baseWidth — 基础宽度
+ * @param {object} opt — { color, opacity, wobble, hairCount }
+ */
+function inkStroke(ctx, points, baseWidth, opt) {
+  const o = Object.assign({ color: '#1a1a1a', opacity: 0.7, wobble: 1.0, hairCount: 4 }, opt || {});
+  if (points.length < 2) return;
+
+  // 对路径添加有机抖动（噪声）
+  const wobbled = [];
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    const frac = i / (points.length - 1);
+    const nx = noise(p.x * 0.01, p.y * 0.01 + frac * 3.7) * o.wobble * 3;
+    const ny = noise(p.x * 0.01 + frac * 5.3, p.y * 0.01) * o.wobble * 3;
+    wobbled.push({ x: p.x + nx, y: p.y + ny });
+  }
+
+  // 计算法线（垂直于路径方向）
+  function normals() {
+    const n = [];
+    for (let i = 0; i < wobbled.length; i++) {
+      let dx, dy;
+      if (i === 0) { dx = wobbled[1].x - wobbled[0].x; dy = wobbled[1].y - wobbled[0].y; }
+      else if (i === wobbled.length - 1) { dx = wobbled[i].x - wobbled[i-1].x; dy = wobbled[i].y - wobbled[i-1].y; }
+      else { dx = wobbled[i+1].x - wobbled[i-1].x; dy = wobbled[i+1].y - wobbled[i-1].y; }
+      const len = Math.hypot(dx, dy) || 1;
+      n.push({ x: -dy / len, y: dx / len });
+    }
+    return n;
+  }
+
+  // 压力模拟：入笔重，收笔轻
+  function pressure(i) {
+    const frac = i / (wobbled.length - 1);
+    if (frac < 0.1) return lerp(0.6, 1.0, frac / 0.1); // 起笔渐重
+    if (frac > 0.7) return lerp(1.0, 0.15, (frac - 0.7) / 0.3); // 收笔渐轻
+    return 1.0;
+  }
+
+  const norms = normals();
+
+  // --- 绘制飞白（毛发偏移笔触）---
+  for (let h = 0; h < o.hairCount; h++) {
+    seedRandom(42 + h * 137); // 每根毛发固定偏移
+    const hairAlpha = lerp(0.05, 0.15, sRand());
+    const hairWidthMul = lerp(0.2, 0.6, sRand());
+    const offsetMag = baseWidth * lerp(0.3, 1.1, sRand());
+
+    ctx.save();
+    ctx.strokeStyle = o.color;
+    ctx.globalAlpha = hairAlpha * o.opacity;
+    ctx.lineWidth = 1;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    for (let i = 0; i < wobbled.length; i++) {
+      const off = sRand() * offsetMag - offsetMag * 0.5;
+      const nx = wobbled[i].x + norms[i].x * off;
+      const ny = wobbled[i].y + norms[i].y * off;
+      if (i === 0) ctx.moveTo(nx, ny); else ctx.lineTo(nx, ny);
+    }
+    ctx.lineWidth = baseWidth * hairWidthMul * 0.5;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // --- 绘制主笔触（用宽度渐变的贝塞尔曲线模拟毛笔）---
+  // 方法：用很多短线段，每段不同线宽，模拟毛笔压力变化
+  ctx.save();
+  ctx.strokeStyle = o.color;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  for (let i = 0; i < wobbled.length - 1; i++) {
+    const frac = i / (wobbled.length - 1);
+    const w = baseWidth * pressure(i) * (0.8 + 0.4 * noise(i * 0.3, frac * 2.0));
+    ctx.lineWidth = Math.max(0.5, w);
+    ctx.globalAlpha = o.opacity * (0.85 + 0.15 * noise(i * 0.5, frac * 4.0));
+    ctx.beginPath();
+    ctx.moveTo(wobbled[i].x, wobbled[i].y);
+    ctx.lineTo(wobbled[i + 1].x, wobbled[i + 1].y);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/**
+ * inkFill — 墨色填充（带渗透/晕染效果）
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {{cx:number,cy:number,r:number}} shape — 圆形区域描述
+ * @param {string} color
+ * @param {object} opt — { opacity, bleed }
+ */
+function inkFill(ctx, shape, color, opt) {
+  const o = Object.assign({ color: '#1a1a1a', opacity: 0.6, bleed: 8 }, opt || {});
+  const { cx, cy, r } = shape;
+
+  // 第一层：渗透（轻微扩大，低透明度）
+  const bleedR = r + o.bleed;
+  const g1 = ctx.createRadialGradient(cx, cy, 0, cx, cy, bleedR);
+  g1.addColorStop(0, colorWithAlpha(o.color, 0.08 * o.opacity));
+  g1.addColorStop(0.6, colorWithAlpha(o.color, 0.04 * o.opacity));
+  g1.addColorStop(1, colorWithAlpha(o.color, 0));
+  ctx.save();
+  ctx.fillStyle = g1;
+  ctx.beginPath();
+  ctx.arc(cx, cy, bleedR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // 第二层：正常填充（中等透明度）
+  const g2 = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+  g2.addColorStop(0, colorWithAlpha(o.color, 0.35 * o.opacity));
+  g2.addColorStop(0.5, colorWithAlpha(o.color, 0.25 * o.opacity));
+  g2.addColorStop(0.85, colorWithAlpha(o.color, 0.15 * o.opacity));
+  g2.addColorStop(1, colorWithAlpha(o.color, 0.05 * o.opacity));
+  ctx.save();
+  ctx.fillStyle = g2;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // 第三层：中心浓墨（缩小，高透明度）
+  const coreR = r * 0.55;
+  const g3 = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR);
+  g3.addColorStop(0, colorWithAlpha(o.color, 0.65 * o.opacity));
+  g3.addColorStop(0.4, colorWithAlpha(o.color, 0.45 * o.opacity));
+  g3.addColorStop(1, colorWithAlpha(o.color, 0.1 * o.opacity));
+  ctx.save();
+  ctx.fillStyle = g3;
+  ctx.beginPath();
+  ctx.arc(cx, cy, coreR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // 额外：边缘不规则渗透纹理
+  seedRandom(999);
+  ctx.save();
+  for (let i = 0; i < 12; i++) {
+    const angle = sRand() * Math.PI * 2;
+    const dist2 = r * lerp(0.85, 1.15, sRand());
+    const sx = cx + Math.cos(angle) * dist2;
+    const sy = cy + Math.sin(angle) * dist2;
+    const sr = lerp(3, 12, sRand());
+    const spotGrad = ctx.createRadialGradient(sx, sy, 0, sx, sy, sr);
+    spotGrad.addColorStop(0, colorWithAlpha(o.color, 0.08 * o.opacity));
+    spotGrad.addColorStop(1, colorWithAlpha(o.color, 0));
+    ctx.fillStyle = spotGrad;
+    ctx.beginPath();
+    ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/**
+ * inkDot — 单个墨点/墨滴
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} x
+ * @param {number} y
+ * @param {number} radius
+ * @param {string} color
+ */
+function inkDot(ctx, x, y, radius, color) {
+  color = color || '#1a1a1a';
+  const r = Math.max(2, radius);
+
+  // 同心圆晕染（由外到内透明度递增）
+  const rings = [
+    { rm: 1.8, alpha: 0.04 },
+    { rm: 1.4, alpha: 0.08 },
+    { rm: 1.1, alpha: 0.15 },
+    { rm: 0.85, alpha: 0.35 },
+    { rm: 0.5, alpha: 0.6 },
+  ];
+  for (const ring of rings) {
+    const rr = r * ring.rm;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, rr);
+    g.addColorStop(0, colorWithAlpha(color, ring.alpha));
+    g.addColorStop(0.6, colorWithAlpha(color, ring.alpha * 0.5));
+    g.addColorStop(1, colorWithAlpha(color, 0));
+    ctx.save();
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, rr, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // 中心实心点
+  ctx.save();
+  ctx.fillStyle = colorWithAlpha(color, 0.75);
+  ctx.beginPath();
+  ctx.arc(x, y, r * 0.25, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // 散落的小卫星墨点
+  seedRandom(Math.round(x * 1000 + y * 7));
+  const satCount = Math.floor(lerp(3, 8, r / 30));
+  for (let i = 0; i < satCount; i++) {
+    const angle = sRand() * Math.PI * 2;
+    const d = r * lerp(1.2, 2.5, sRand());
+    const sx = x + Math.cos(angle) * d;
+    const sy = y + Math.sin(angle) * d;
+    const sr = lerp(0.5, 2.5, sRand());
+    ctx.save();
+    ctx.fillStyle = colorWithAlpha(color, lerp(0.1, 0.35, sRand()));
+    ctx.beginPath();
+    ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+// --- 辅助：颜色 + 透明度字符串 ---
+function colorWithAlpha(hex, alpha) {
+  const c = parseInt(hex.replace('#', ''), 16);
+  const r = (c >> 16) & 0xff, g = (c >> 8) & 0xff, b = c & 0xff;
+  return 'rgba(' + r + ',' + g + ',' + b + ',' + clamp(alpha, 0, 1).toFixed(4) + ')';
+}
+
+// ============================================================
+// 三、宣纸纹理（预渲染，每帧复用）
+// ============================================================
+
+let _paperCanvas = null;
+
+function generatePaperTexture(w, h) {
+  const offC = document.createElement('canvas');
+  offC.width = w; offC.height = h;
+  const c = offC.getContext('2d');
+
+  // 底色：暖白色宣纸
+  c.fillStyle = '#f5f0e6';
+  c.fillRect(0, 0, w, h);
+
+  // 大面积微妙渐变（模拟纸张不均匀）
+  seedRandom(12345);
+  for (let i = 0; i < 5; i++) {
+    const gx = sRand() * w, gy = sRand() * h;
+    const gr = lerp(200, 600, sRand());
+    const grad = c.createRadialGradient(gx, gy, 0, gx, gy, gr);
+    grad.addColorStop(0, 'rgba(220,210,190,0.12)');
+    grad.addColorStop(1, 'rgba(220,210,190,0)');
+    c.fillStyle = grad;
+    c.fillRect(0, 0, w, h);
+  }
+
+  // 纸纤维：2000+ 细线
+  c.strokeStyle = 'rgba(200,190,170,0.2)';
+  c.lineWidth = 0.5;
+  for (let i = 0; i < 2500; i++) {
+    const sx = sRand() * w;
+    const sy = sRand() * h;
+    const len = lerp(5, 40, sRand());
+    const angle = sRand() * Math.PI;
+    const ex = sx + Math.cos(angle) * len;
+    const ey = sy + Math.sin(angle) * len;
+    c.globalAlpha = lerp(0.05, 0.2, sRand());
+    c.lineWidth = lerp(0.3, 0.8, sRand());
+    c.beginPath();
+    c.moveTo(sx, sy);
+    c.lineTo(ex, ey);
+    c.stroke();
+  }
+  c.globalAlpha = 1;
+
+  // 轻微的噪点覆盖
+  const imgData = c.getImageData(0, 0, w, h);
+  const d = imgData.data;
+  seedRandom(77777);
+  for (let i = 0; i < d.length; i += 4) {
+    const n = (sRand() - 0.5) * 8;
+    d[i]   = clamp(d[i] + n, 0, 255);
+    d[i+1] = clamp(d[i+1] + n, 0, 255);
+    d[i+2] = clamp(d[i+2] + n, 0, 255);
+  }
+  c.putImageData(imgData, 0, 0);
+
+  return offC;
+}
+
+// ============================================================
+// 四、测试场景（renderFrame — 主渲染函数）
+// ============================================================
+
+initNoise(42);
+
+function renderFrame(t) {
+  // 确保纸纹理已生成
+  if (!_paperCanvas) _paperCanvas = generatePaperTexture(W, H);
+
+
+
+  // 获取镜头状态
+  const cam = getCameraState(t);
+  // 获取场景可见性
+  const vis = getSceneVisibility(t);
+  // 获取变态发育参数
+  const meta = getMetamorphosis(t);
+
+  // 清空并绘制宣纸
+  ctx.clearRect(0, 0, W, H);
+  ctx.drawImage(_paperCanvas, 0, 0);
+
+  // 应用镜头变换
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+  ctx.scale(cam.zoom, cam.zoom);
+  ctx.translate(-cam.cx, -cam.cy);
+
+  const slow = t * 0.15;
+
+  // --- 水下氛围（底层） ---
+  drawCaustics(ctx, t);
+  drawUnderwaterFog(ctx, t);
+
+  // --- 水草 ---
+  if (vis.grasses) {
+    for (const g of sceneElements.grasses) {
+      g.draw(ctx, t);
+    }
+  }
+
+  // --- 卵泡 ---
+  if (vis.eggs) {
+    for (const e of sceneElements.eggs) {
+      e.draw(ctx, t);
+    }
+  }
+
+  // --- 荷叶 ---
+  if (vis.leaves) {
+    for (const lf of sceneElements.leaves) {
+      lf.draw(ctx, t);
+    }
+  }
+
+  // --- 乌龟（背景层） ---
+  if (vis.turtle) {
+    sceneElements.turtles[0].update(t);
+    sceneElements.turtles[0].draw(ctx, t);
+  }
+
+  // --- 鲤鱼 ---
+  if (vis.carp) {
+    sceneElements.carp[0].update(t);
+    sceneElements.carp[0].draw(ctx, t);
+  }
+
+  // --- 蝇蚁（主角） ---
+  if (vis.tadpole) {
+    const target = getTadpoleTarget(t);
+    tadpole.update(1 / 30, target.x, target.y);
+    tadpole.draw(ctx, meta);
+  }
+
+
+  // --- 螃蟹 ---
+  if (vis.crab) {
+    sceneElements.crabs[0].update(t);
+    sceneElements.crabs[0].draw(ctx, t);
+  }
+
+  // --- 青蛙妈妈 ---
+  if (vis.frogMother) {
+    const frogAlpha = smoothstep(55, 60, t);
+    ctx.save();
+    ctx.globalAlpha = frogAlpha * 0.8;
+    sceneElements.frogMother.update(t);
+    sceneElements.frogMother.draw(ctx, t);
+    ctx.restore();
+  }
+
+  // --- 气泡（前景层） ---
+  drawBubbles(ctx, t);
+
+  // --- 水面 ---
+  drawWaterSurface(ctx, t);
+
+  ctx.restore(); // 恢复镜头变换
+
+  // --- 墨滴开场特效（t=0-8） ---
+  if (t < 8) {
+    drawInkDropOpening(ctx, t);
+  }
+
+  // --- 结尾留白（t>82） ---
+  if (t > 82) {
+    drawEndingFade(ctx, t);
+  }
+
+  // --- 转场覆盖 ---
+  const transAlpha = getTransitionAlpha(t);
+  if (transAlpha > 0.001) {
+    ctx.save();
+    ctx.fillStyle = `rgba(30,25,20,${transAlpha})`;
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+
+  // --- 后处理 ---
+  applyPostProcessing(ctx, t);
+
+  // --- 字幕 ---
+  drawSubtitle(ctx, t);
+}
+
+// ============================================================
+// 七、开场特效：墨滴落下 + 纸张展开
+// ============================================================
+
+function drawInkDropOpening(ctx, t) {
+  if (t < 1) return;
+  
+  // 墨滴从上方落下
+  const dropProgress = smoothstep(1, 4, t);
+  const dropY = lerp(-50, 340, Math.min(1, dropProgress * 1.5));
+  const dropSize = lerp(3, 20, Math.min(1, dropProgress));
+  
+  if (dropProgress < 1.0) {
+    // 墨滴本体
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(640, dropY, dropSize * 0.6, dropSize, 0, 0, Math.PI * 2);
+    ctx.fillStyle = '#1a1a1a';
+    ctx.globalAlpha = 0.9;
+    ctx.fill();
+    ctx.restore();
+    
+    // 墨滴尾迹
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(640, Math.max(0, dropY - 80));
+    ctx.quadraticCurveTo(640, dropY - 40, 640, dropY);
+    ctx.lineWidth = dropSize * 0.4;
+    ctx.strokeStyle = 'rgba(26,26,26,0.4)';
+    ctx.stroke();
+    ctx.restore();
+  }
+  
+  // 墨滴溅落 → 扩散
+  if (t > 3.5) {
+    const splashT = (t - 3.5) / 4.5;
+    const splashR = lerp(0, 200, Math.min(1, splashT * 0.8));
+    const splashAlpha = Math.max(0, 1.0 - splashT * 0.6);
+    
+    ctx.save();
+    ctx.globalAlpha = splashAlpha * 0.3;
+    ctx.beginPath();
+    ctx.arc(640, 350, Math.max(1, splashR), 0, Math.PI * 2);
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fill();
+    ctx.restore();
+    
+    // 涟漪
+    for (let ring = 0; ring < 3; ring++) {
+      const ringR = splashR * (1 + ring * 0.3);
+      const ringAlpha = Math.max(0, (1 - splashT - ring * 0.2)) * 0.4;
+      if (ringAlpha > 0 && ringR > 0) {
+        ctx.save();
+        ctx.globalAlpha = ringAlpha;
+        ctx.beginPath();
+        ctx.arc(640, 350, Math.max(1, ringR), 0, Math.PI * 2);
+        ctx.lineWidth = 2 - ring * 0.5;
+        ctx.strokeStyle = '#1a1a1a';
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+}
+
+// ============================================================
+// 八、结尾特效：场景淡入水墨留白
+// ============================================================
+
+function drawEndingFade(ctx, t) {
+  const fadeP = smoothstep(82, 88, t);
+  
+  // 白色覆盖，从底部上升
+  ctx.save();
+  const gradient = ctx.createLinearGradient(0, H * (1 - fadeP), 0, H);
+  gradient.addColorStop(0, `rgba(245,240,230,0)`);
+  gradient.addColorStop(0.5, `rgba(245,240,230,${fadeP * 0.3})`);
+  gradient.addColorStop(1, `rgba(245,240,230,${fadeP * 0.6})`);
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+  
+  // 青蛙剪影（最后时刻）
+  if (t > 84) {
+    const silP = smoothstep(84, 88, t);
+    ctx.save();
+    ctx.globalAlpha = silP * (1.0 - smoothstep(88, 90, t));
+    ctx.fillStyle = '#2a2520';
+    // 简化蛙形
+    ctx.beginPath();
+    ctx.ellipse(640, 380, 35, 25, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(625, 362, 12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(655, 362, 12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+
+// ============================================================
+// 五、集成与预览模式
+// ============================================================
+
+// 暴露给 Playwright 的全局函数
+window.renderFrame = renderFrame;
+
+// 预览模式：检测是否在浏览器中直接打开（非 Playwright 环境）
+if (typeof window !== 'undefined' && !window.__PLAYWRIGHT__) {
+  let startTime = null;
+  const DURATION = 90; // 90 秒循环
+
+  function previewLoop(timestamp) {
+    if (!startTime) startTime = timestamp;
+    const elapsed = ((timestamp - startTime) / 1000) % DURATION;
+    renderFrame(elapsed);
+    requestAnimationFrame(previewLoop);
+  }
+
+  requestAnimationFrame(previewLoop);
+}
+
+// ============================================================
+// 四、蝌蚪角色系统
+// ============================================================
+
+// --- 蝌蚪游泳路径（八字形）---
+function getTadpoleTarget(t) {
+  const cx = 640, cy = 380, rx = 280, ry = 160;
+  return {
+    x: cx + Math.sin(t * 0.35) * rx,
+    y: cy + Math.sin(t * 0.7) * ry * 0.8
+  };
+}
+
+// --- 蝌蚪类 ---
+class Tadpole {
+  constructor(x, y, size) {
+    this.x = x; this.y = y;
+    this.vx = 0; this.vy = 0;
+    this.size = size || 1.0;
+    this.facing = 0; // 朝向角度
+    this.tailPhase = 0;
+  }
+
+  update(t, targetX, targetY) {
+    // 弹簧物理
+    const springK = 0.0025;
+    const damping = 0.955;
+    this.vx += (targetX - this.x) * springK;
+    this.vy += (targetY - this.y) * springK;
+    this.vx *= damping;
+    this.vy *= damping;
+    this.x += this.vx;
+    this.y += this.vy;
+
+    // 朝向（平滑过渡）
+    const speed = Math.hypot(this.vx, this.vy);
+    if (speed > 0.3) {
+      const target = Math.atan2(this.vy, this.vx);
+      let diff = target - this.facing;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      this.facing += diff * 0.08;
+    }
+
+    // 尾巴相位随速度增加
+    this.tailPhase += 0.08 + speed * 0.015;
+  }
+
+  draw(ctx, t) {
+    const s = this.size;
+    const headRx = 18 * s, headRy = 14 * s;
+    const cos = Math.cos(this.facing);
+    const sin = Math.sin(this.facing);
+
+    // 坐标变换辅助
+    const tx = (px, py) => ({ x: this.x + px * cos - py * sin, y: this.y + px * sin + py * cos });
+
+    // Squash & stretch
+    const speed = Math.hypot(this.vx, this.vy);
+    const stretchX = 1.0 + clamp(speed * 0.015, 0, 0.15);
+    const stretchY = 1.0 / stretchX;
+
+    // --- 画尾巴（30个控制点）---
+    const tailLen = 55 * s;
+    const tailPoints = [];
+    for (let i = 0; i <= 30; i++) {
+      const frac = i / 30;
+      const localX = -headRx + frac * tailLen;
+      // sin波动 + 噪声
+      const waveAmp = frac * frac * 18 * s; // 越远振幅越大
+      const waveY = Math.sin(frac * Math.PI * 2.5 + this.tailPhase) * waveAmp;
+      const noiseY = noise(frac * 0.8 + t * 0.3, this.tailPhase * 0.1) * 3 * s;
+      const p = tx(localX * stretchX, (waveY + noiseY) * stretchY);
+      tailPoints.push(p);
+    }
+    inkStroke(ctx, tailPoints, 4 * s, {
+      color: '#1a1a1a', opacity: 0.5, wobble: 0.3, hairCount: 2
+    });
+
+    // --- 画头部（椭圆轮廓）---
+    const headPoints = [];
+    for (let i = 0; i <= 24; i++) {
+      const angle = (i / 24) * Math.PI * 2;
+      const px = Math.cos(angle) * headRx * stretchX;
+      const py = Math.sin(angle) * headRy * stretchY;
+      const p = tx(px, py);
+      // 微小噪声让轮廓有手绘感
+      p.x += noise(angle * 2 + t * 0.1, 10) * 1.5;
+      p.y += noise(angle * 2 + t * 0.1, 20) * 1.5;
+      headPoints.push(p);
+    }
+    inkStroke(ctx, headPoints, 3.5 * s, {
+      color: '#1a1a1a', opacity: 0.65, wobble: 0.2, hairCount: 3
+    });
+
+    // --- 填充头部 ---
+    inkFill(ctx, { cx: this.x, cy: this.y, r: headRx * 0.85 }, '#1a1a1a', {
+      opacity: 0.35, bleed: 4
+    });
+
+    // --- 眼睛 ---
+    const eyeOffset = 6 * s;
+    const eyeX = this.x + cos * eyeOffset + sin * (-4 * s);
+    const eyeY = this.y + sin * eyeOffset + cos * 4 * s;
+    inkDot(ctx, eyeX, eyeY, 4 * s, '#0a0a0a');
+    // 高光
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.beginPath();
+    ctx.arc(eyeX - 1.5 * s, eyeY - 1.5 * s, 1.5 * s, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+// ============================================================
+// 五、水下氛围系统
+// ============================================================
+
+// --- 水面波纹 ---
+function drawWaterSurface(ctx, t) {
+  const waveBaseY = 55;
+
+  // 多层正弦波叠加
+  function waveY(x, t) {
+    return waveBaseY
+      + Math.sin(x * 0.008 + t * 0.5) * 8
+      + Math.sin(x * 0.015 + t * 0.8) * 5
+      + Math.sin(x * 0.025 + t * 1.2) * 3;
+  }
+
+  // 填充水面以下区域
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  for (let x = 0; x <= W; x += 4) {
+    ctx.lineTo(x, waveY(x, t));
+  }
+  ctx.lineTo(W, 0);
+  ctx.closePath();
+
+  const grad = ctx.createLinearGradient(0, 0, 0, waveBaseY + 20);
+  const pulse = 0.12 + Math.sin(t * 0.3) * 0.03;
+  grad.addColorStop(0, 'rgba(160,200,210,' + pulse.toFixed(3) + ')');
+  grad.addColorStop(0.5, 'rgba(140,185,195,' + (pulse * 0.5).toFixed(3) + ')');
+  grad.addColorStop(1, 'rgba(120,170,180,0)');
+  ctx.fillStyle = grad;
+  ctx.fill();
+  ctx.restore();
+
+  // 波峰高光线
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  for (let x = 0; x <= W; x += 3) {
+    const y = waveY(x, t);
+    if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // 第二条更细的高光
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  for (let x = 0; x <= W; x += 3) {
+    const y = waveY(x, t) + 3;
+    if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+// --- 焦散光纹 ---
+function drawCaustics(ctx, t) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+
+  seedRandom(42);
+  const count = 10;
+  for (let i = 0; i < count; i++) {
+    const phaseX = sRand() * Math.PI * 2;
+    const phaseY = sRand() * Math.PI * 2;
+    const speedX = 0.1 + sRand() * 0.2;
+    const speedY = 0.08 + sRand() * 0.15;
+    const majorA = lerp(80, 200, sRand());
+    const minorA = lerp(40, 100, sRand());
+    const alpha = lerp(0.02, 0.06, sRand());
+    const rotSpeed = (sRand() - 0.5) * 0.3;
+
+    const cx = W * 0.5 + Math.sin(t * speedX + phaseX) * W * 0.4;
+    const cy = H * 0.3 + Math.cos(t * speedY + phaseY) * H * 0.35;
+    const rot = t * rotSpeed;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(rot);
+    ctx.fillStyle = 'rgba(255,250,230,' + alpha.toFixed(3) + ')';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, majorA, minorA, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// --- 水下雾气 ---
+function drawUnderwaterFog(ctx, t) {
+  const breath = 0.06 + Math.sin(t * 0.2) * 0.015;
+  const grad = ctx.createLinearGradient(0, 80, 0, H);
+  grad.addColorStop(0, 'rgba(40,80,90,0)');
+  grad.addColorStop(0.3, 'rgba(40,80,90,' + (breath * 0.3).toFixed(4) + ')');
+  grad.addColorStop(0.6, 'rgba(40,80,90,' + (breath * 0.7).toFixed(4) + ')');
+  grad.addColorStop(1, 'rgba(30,60,70,' + breath.toFixed(4) + ')');
+  ctx.save();
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
+// --- 气泡 ---
+function drawBubbles(ctx, t) {
+  seedRandom(314);
+  const count = 15;
+  for (let i = 0; i < count; i++) {
+    const baseX = sRand() * W;
+    const radius = lerp(2, 7, sRand());
+    const speed = lerp(25, 65, sRand());
+    const wobbleFreq = lerp(0.5, 1.5, sRand());
+    const wobbleAmp = lerp(5, 15, sRand());
+    const alpha = lerp(0.08, 0.3, sRand());
+    const phaseOffset = sRand() * 100;
+
+    // y循环：从底部到顶部
+    const cycleH = H + 100;
+    const yRaw = (H + 50) - ((t * speed + phaseOffset * 30) % cycleH);
+    const x = baseX + Math.sin(t * wobbleFreq + phaseOffset) * wobbleAmp;
+
+    // 只画可见区域的气泡
+    if (yRaw > 60 && yRaw < H && x > 0 && x < W) {
+      ctx.save();
+      // 气泡轮廓
+      ctx.strokeStyle = 'rgba(200,230,240,' + alpha.toFixed(3) + ')';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.arc(x, yRaw, radius, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // 高光点
+      ctx.fillStyle = 'rgba(255,255,255,' + (alpha * 1.5).toFixed(3) + ')';
+      ctx.beginPath();
+      ctx.arc(x - radius * 0.3, yRaw - radius * 0.3, radius * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+}
+
+
+
+// ============================================================
+// 六、配角角色 + 场景元素
+// ============================================================
+
+// --- 鲤鱼 ---
+class Carp {
+  constructor(x, y, size, facing) {
+    this.x = x; this.y = y;
+    this.size = size || 0.8;
+    this.facing = facing || 0;
+    this.baseY = y;
+    this.phase = Math.random() * Math.PI * 2;
+  }
+  update(t) {
+    // 缓慢水平游动 + 微微上下浮动
+    this.x += Math.cos(this.facing) * 0.3 * this.size;
+    if (this.x > W + 100) this.x = -100;
+    if (this.x < -100) this.x = W + 100;
+    this.y = this.baseY + Math.sin(t * 0.5 + this.phase) * 15;
+  }
+  draw(ctx, t) {
+    const s = this.size;
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.scale(-Math.sign(Math.cos(this.facing)), 1); // 朝向
+    ctx.globalAlpha = 0.6; // 配角色淡，暗示远近
+
+    // 身体：椭圆
+    const bodyPts = [];
+    for (let i = 0; i <= 24; i++) {
+      const a = (i / 24) * Math.PI * 2;
+      bodyPts.push({
+        x: Math.cos(a) * 40 * s + noise(a * 2, t * 0.1) * 1,
+        y: Math.sin(a) * 18 * s + noise(a * 2, t * 0.1 + 5) * 1
+      });
+    }
+    inkStroke(ctx, bodyPts, 3 * s, { color: '#2a2520', opacity: 0.5, wobble: 0.2, hairCount: 2 });
+
+    // 尾鳍
+    const tailPts = [];
+    for (let i = 0; i <= 15; i++) {
+      const frac = i / 15;
+      tailPts.push({
+        x: 35 * s + frac * 25 * s,
+        y: Math.sin(frac * 1.5 + t * 3 + this.phase) * 15 * s * frac
+      });
+    }
+    inkStroke(ctx, tailPts, 2 * s, { color: '#2a2520', opacity: 0.35, wobble: 0.3, hairCount: 1 });
+
+    // 眼睛
+    inkDot(ctx, -25 * s, -3 * s, 3 * s, '#0a0a0a');
+
+    ctx.restore();
+  }
+}
+
+// --- 螃蟹 ---
+class Crab {
+  constructor(x, y) {
+    this.x = x; this.y = y;
+    this.baseX = x; this.baseY = y;
+    this.phase = Math.random() * 10;
+  }
+  update(t) {
+    // 螃蟹在底部缓慢横移
+    this.x = this.baseX + Math.sin(t * 0.15 + this.phase) * 60;
+    this.y = this.baseY + Math.sin(t * 0.3 + this.phase) * 5;
+  }
+  draw(ctx, t) {
+    const s = 0.7;
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.globalAlpha = 0.5;
+
+    // 身体：扁椭圆
+    const bodyPts = [];
+    for (let i = 0; i <= 24; i++) {
+      const a = (i / 24) * Math.PI * 2;
+      bodyPts.push({
+        x: Math.cos(a) * 22 * s,
+        y: Math.sin(a) * 14 * s
+      });
+    }
+    inkStroke(ctx, bodyPts, 3 * s, { color: '#1a1510', opacity: 0.55, wobble: 0.3, hairCount: 2 });
+
+    // 眼睛（两根柄+两个点）
+    inkDot(ctx, -8 * s, -14 * s, 2.5 * s, '#0a0a0a');
+    inkDot(ctx, 8 * s, -14 * s, 2.5 * s, '#0a0a0a');
+
+    // 钳子（左右各一个弧线）
+    const clawAngle = Math.sin(t * 0.8 + this.phase) * 0.3;
+    const leftClaw = [];
+    for (let i = 0; i <= 10; i++) {
+      const frac = i / 10;
+      leftClaw.push({
+        x: -25 * s - Math.cos(frac * 1.2 + clawAngle) * 15 * s,
+        y: -5 * s + Math.sin(frac * 1.2 + clawAngle) * 12 * s
+      });
+    }
+    inkStroke(ctx, leftClaw, 2.5 * s, { color: '#1a1510', opacity: 0.45, wobble: 0.2, hairCount: 1 });
+
+    const rightClaw = [];
+    for (let i = 0; i <= 10; i++) {
+      const frac = i / 10;
+      rightClaw.push({
+        x: 25 * s + Math.cos(frac * 1.2 + clawAngle) * 15 * s,
+        y: -5 * s + Math.sin(frac * 1.2 + clawAngle) * 12 * s
+      });
+    }
+    inkStroke(ctx, rightClaw, 2.5 * s, { color: '#1a1510', opacity: 0.45, wobble: 0.2, hairCount: 1 });
+
+    ctx.restore();
+  }
+}
+
+// --- 乌龟 ---
+class Turtle {
+  constructor(x, y) {
+    this.x = x; this.y = y;
+    this.baseX = x; this.baseY = y;
+    this.phase = Math.random() * 10;
+  }
+  update(t) {
+    this.x = this.baseX + Math.sin(t * 0.1 + this.phase) * 80;
+    this.y = this.baseY + Math.cos(t * 0.15 + this.phase) * 30;
+  }
+  draw(ctx, t) {
+    const s = 0.9;
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.globalAlpha = 0.45;
+
+    // 壳：半圆
+    const shellPts = [];
+    for (let i = 0; i <= 20; i++) {
+      const a = (i / 20) * Math.PI;
+      shellPts.push({
+        x: Math.cos(a) * 28 * s * (1 + noise(a, t * 0.1) * 0.05),
+        y: -Math.sin(a) * 20 * s * (1 + noise(a, t * 0.1 + 3) * 0.05)
+      });
+    }
+    inkStroke(ctx, shellPts, 3.5 * s, { color: '#2a2018', opacity: 0.5, wobble: 0.2, hairCount: 2 });
+    inkFill(ctx, { cx: 0, cy: -8 * s, r: 22 * s }, '#2a2018', { opacity: 0.2, bleed: 5 });
+
+    // 头
+    inkFill(ctx, { cx: -28 * s, cy: 2 * s, r: 8 * s }, '#1a1510', { opacity: 0.3, bleed: 2 });
+
+    // 四条腿
+    const legTime = t * 1.5 + this.phase;
+    const legs = [
+      { bx: -12, by: 10, angle: Math.sin(legTime) * 0.4 },
+      { bx: 12, by: 10, angle: Math.sin(legTime + 1.5) * 0.4 },
+      { bx: -12, by: -2, angle: Math.sin(legTime + 0.75) * 0.3 },
+      { bx: 12, by: -2, angle: Math.sin(legTime + 2.25) * 0.3 },
+    ];
+    for (const leg of legs) {
+      const pts = [];
+      for (let i = 0; i <= 8; i++) {
+        const frac = i / 8;
+        pts.push({
+          x: leg.bx * s + Math.cos(leg.angle + 1.2) * frac * 12 * s,
+          y: leg.by * s + Math.sin(leg.angle + 1.2) * frac * 12 * s
+        });
+      }
+      inkStroke(ctx, pts, 2 * s, { color: '#1a1510', opacity: 0.35, wobble: 0.2, hairCount: 1 });
+    }
+
+    // 眼
+    inkDot(ctx, -32 * s, -2 * s, 2 * s, '#0a0a0a');
+    ctx.restore();
+  }
+}
+
+// --- 青蛙妈妈 ---
+class FrogMother {
+  constructor(x, y) {
+    this.x = x; this.y = y;
+    this.breathPhase = 0;
+  }
+  update(t) {
+    // 呼吸感（微微起伏）
+    this.breathPhase = Math.sin(t * 1.2) * 2;
+  }
+  draw(ctx, t) {
+    const s = 1.3;
+    ctx.save();
+    ctx.translate(this.x, this.y + this.breathPhase);
+
+    // 身体：大椭圆
+    const bodyPts = [];
+    for (let i = 0; i <= 28; i++) {
+      const a = (i / 28) * Math.PI * 2;
+      bodyPts.push({
+        x: Math.cos(a) * 35 * s + noise(a * 2, t * 0.08) * 1.5,
+        y: Math.sin(a) * 25 * s + noise(a * 2, t * 0.08 + 5) * 1.5
+      });
+    }
+    inkStroke(ctx, bodyPts, 4 * s, { color: '#1a1a1a', opacity: 0.7, wobble: 0.2, hairCount: 3 });
+    inkFill(ctx, { cx: 0, cy: 5 * s, r: 30 * s }, '#1a1a1a', { opacity: 0.3, bleed: 6 });
+
+    // 肚皮（淡墨）
+    inkFill(ctx, { cx: 0, cy: 10 * s, r: 20 * s }, '#3a3530', { opacity: 0.15, bleed: 3 });
+
+    // 眼睛（突出的两个圆）
+    inkDot(ctx, -15 * s, -20 * s, 7 * s, '#1a1a1a');
+    inkDot(ctx, 15 * s, -20 * s, 7 * s, '#1a1a1a');
+    // 瞳孔高光
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.beginPath(); ctx.arc(-17 * s, -22 * s, 2 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(13 * s, -22 * s, 2 * s, 0, Math.PI * 2); ctx.fill();
+
+    // 嘴巴（微笑弧线）
+    const mouthPts = [];
+    for (let i = 0; i <= 12; i++) {
+      const frac = i / 12;
+      mouthPts.push({
+        x: lerp(-18 * s, 18 * s, frac),
+        y: -5 * s + Math.sin(frac * Math.PI) * 6 * s
+      });
+    }
+    inkStroke(ctx, mouthPts, 2 * s, { color: '#1a1a1a', opacity: 0.45, wobble: 0.1, hairCount: 1 });
+
+    // 前腿
+    const legPairs = [
+      { bx: -30, by: 15, endX: -50, endY: 35, phaseOff: 0 },
+      { bx: 30, by: 15, endX: 50, endY: 35, phaseOff: Math.PI },
+    ];
+    for (const leg of legPairs) {
+      const pts = [];
+      for (let i = 0; i <= 8; i++) {
+        const frac = i / 8;
+        pts.push({
+          x: lerp(leg.bx * s, leg.endX * s, frac),
+          y: lerp(leg.by * s, leg.endY * s, frac) + Math.sin(frac * Math.PI) * 5 * s
+        });
+      }
+      inkStroke(ctx, pts, 3 * s, { color: '#1a1a1a', opacity: 0.5, wobble: 0.2, hairCount: 2 });
+    }
+
+    // 后腿（弯曲更大）
+    const hindLegs = [
+      { bx: -25, by: 20, endX: -55, endY: 30, phaseOff: 0.5 },
+      { bx: 25, by: 20, endX: 55, endY: 30, phaseOff: Math.PI + 0.5 },
+    ];
+    for (const leg of hindLegs) {
+      const pts = [];
+      for (let i = 0; i <= 12; i++) {
+        const frac = i / 12;
+        pts.push({
+          x: lerp(leg.bx * s, leg.endX * s, frac),
+          y: lerp(leg.by * s, leg.endY * s, frac) + Math.sin(frac * Math.PI * 0.8) * 10 * s
+        });
+      }
+      inkStroke(ctx, pts, 3.5 * s, { color: '#1a1a1a', opacity: 0.5, wobble: 0.2, hairCount: 2 });
+    }
+
+    ctx.restore();
+  }
+}
+
+// --- 水草 ---
+class WaterGrass {
+  constructor(x, baseY, segments, height) {
+    this.x = x;
+    this.baseY = baseY;
+    this.segments = segments || 8;
+    this.height = height || 80;
+    this.phase = Math.random() * Math.PI * 2;
+    this.thickness = lerp(1.5, 4, Math.random());
+  }
+  draw(ctx, t) {
+    const pts = [];
+    for (let i = 0; i <= this.segments; i++) {
+      const frac = i / this.segments;
+      const sway = Math.sin(t * 0.6 + frac * 2 + this.phase) * 12 * frac * frac;
+      const noiseSway = noise(frac * 1.5 + this.phase, t * 0.2) * 6 * frac;
+      pts.push({
+        x: this.x + sway + noiseSway,
+        y: this.baseY - frac * this.height
+      });
+    }
+    inkStroke(ctx, pts, this.thickness, {
+      color: '#2a3828', opacity: 0.5, wobble: 0.15, hairCount: 2
+    });
+  }
+}
+
+// --- 荷叶 ---
+class LotusLeaf {
+  constructor(x, y, radius) {
+    this.x = x; this.y = y;
+    this.radius = radius || 45;
+    this.phase = Math.random() * Math.PI * 2;
+    this.gapAngle = Math.random() * Math.PI * 2; // 缺口方向
+  }
+  draw(ctx, t) {
+    const r = this.radius;
+    const floatY = Math.sin(t * 0.4 + this.phase) * 3;
+
+    ctx.save();
+    ctx.translate(this.x, this.y + floatY);
+
+    // 荷叶轮廓（带缺口的圆弧）
+    const leafPts = [];
+    const gapSize = 0.3; // 缺口大小(弧度)
+    for (let i = 0; i <= 24; i++) {
+      const a = this.gapAngle + gapSize + (i / 24) * (Math.PI * 2 - gapSize);
+      const rr = r * (0.9 + noise(a * 2, t * 0.05) * 0.1);
+      leafPts.push({
+        x: Math.cos(a) * rr,
+        y: Math.sin(a) * rr * 0.6 // 透视压扁
+      });
+    }
+    inkStroke(ctx, leafPts, 2.5, { color: '#1a2a15', opacity: 0.45, wobble: 0.2, hairCount: 2 });
+
+    // 叶面填充（淡墨绿）
+    inkFill(ctx, { cx: 0, cy: 0, r: r * 0.7 }, '#1a2a15', { opacity: 0.15, bleed: 5 });
+
+    // 叶脉（从中心放射）
+    seedRandom(Math.round(this.x * 100 + this.y));
+    const veinCount = 5 + Math.floor(sRand() * 4);
+    for (let i = 0; i < veinCount; i++) {
+      const angle = (i / veinCount) * Math.PI * 2 + this.gapAngle + gapSize * 0.5;
+      const len = r * lerp(0.5, 0.85, sRand());
+      const pts = [];
+      for (let j = 0; j <= 6; j++) {
+        const frac = j / 6;
+        pts.push({
+          x: Math.cos(angle) * len * frac + noise(frac + i, t * 0.05) * 1,
+          y: Math.sin(angle) * len * frac * 0.6 + noise(frac + i, t * 0.05 + 3) * 1
+        });
+      }
+      inkStroke(ctx, pts, 0.8, { color: '#1a2a15', opacity: 0.2, wobble: 0.1, hairCount: 0 });
+    }
+
+    // 水珠（1-3个小高光点）
+    seedRandom(Math.round(this.x * 7 + this.y * 3));
+    const dropCount = 1 + Math.floor(sRand() * 3);
+    for (let i = 0; i < dropCount; i++) {
+      const dx = (sRand() - 0.5) * r * 1.2;
+      const dy = (sRand() - 0.5) * r * 0.5;
+      ctx.save();
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.beginPath();
+      ctx.arc(dx, dy, lerp(1.5, 3, sRand()), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+}
+
+// --- 卵泡 ---
+class EggCluster {
+  constructor(x, y) {
+    this.x = x; this.y = y;
+    this.eggs = [];
+    seedRandom(Math.round(x * 100 + y));
+    const count = 5 + Math.floor(sRand() * 8);
+    for (let i = 0; i < count; i++) {
+      this.eggs.push({
+        ox: (sRand() - 0.5) * 50,
+        oy: (sRand() - 0.5) * 30,
+        r: lerp(6, 12, sRand()),
+        phase: sRand() * Math.PI * 2
+      });
+    }
+  }
+  draw(ctx, t) {
+    for (const egg of this.eggs) {
+      const ex = this.x + egg.ox + Math.sin(t * 0.5 + egg.phase) * 2;
+      const ey = this.y + egg.oy + Math.cos(t * 0.4 + egg.phase) * 1.5;
+
+      // 卵壳：半透明椭圆
+      ctx.save();
+      ctx.strokeStyle = 'rgba(30,50,40,0.25)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(ex, ey, egg.r, egg.r * 0.8, 0, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // 内部（淡填充）
+      const g = ctx.createRadialGradient(ex, ey, 0, ex, ey, egg.r);
+      g.addColorStop(0, 'rgba(200,210,180,0.15)');
+      g.addColorStop(1, 'rgba(200,210,180,0)');
+      ctx.fillStyle = g;
+      ctx.fill();
+
+      // 内部小黑点（蝌蚪胚胎）
+      inkDot(ctx, ex, ey, egg.r * 0.15, '#1a1a1a');
+      ctx.restore();
+    }
+  }
+}
+
+// --- 创建场景元素实例 ---
+;
+const tadpole = new Tadpole(640, 360, 1.0);
+
+const sceneElements = {
+  // 配角
+  carp: [new Carp(200, 450, 0.7, 0), new Carp(900, 320, 0.6, Math.PI * 0.8)],
+  crabs: [new Crab(350, 650), new Crab(800, 670)],
+  turtles: [new Turtle(150, 550)],
+  frogMother: new FrogMother(900, 500),
+
+  // 场景
+  grasses: [
+    new WaterGrass(80, 720, 10, 100),
+    new WaterGrass(120, 720, 8, 75),
+    new WaterGrass(160, 720, 12, 120),
+    new WaterGrass(1100, 720, 9, 90),
+    new WaterGrass(1150, 720, 11, 110),
+    new WaterGrass(1190, 720, 7, 65),
+    new WaterGrass(600, 720, 10, 95),
+    new WaterGrass(640, 720, 8, 70),
+  ],
+  leaves: [
+    new LotusLeaf(200, 100, 50),
+    new LotusLeaf(1050, 90, 45),
+    new LotusLeaf(640, 85, 55),
+  ],
+  eggs: [
+    new EggCluster(500, 550),
+    new EggCluster(700, 580),
+  ],
+};
+
+
+// ============================================================
+// 六b、变态发育系统
+// ============================================================
+
+// 蝌蚪→青蛙形态插值参数
+function getMetamorphosis(t) {
+  // t: 0-90秒
+  if (t < 30) return { tailLen: 1.0, legsBack: 0, legsFront: 0, bodyRound: 0, color: '#1a1a1a' };
+  if (t < 45) {
+    const p = (t - 30) / 15; // 0→1
+    return { tailLen: 1.0 - p * 0.5, legsBack: p, legsFront: 0, bodyRound: p * 0.2, color: '#1a1a1a' };
+  }
+  if (t < 60) {
+    const p = (t - 45) / 15;
+    return { tailLen: 0.5 - p * 0.5, legsBack: 1.0, legsFront: p, bodyRound: 0.2 + p * 0.3, color: '#1a1a1a' };
+  }
+  if (t < 75) {
+    const p = (t - 60) / 15;
+    return { tailLen: Math.max(0, 0.0), legsBack: 1.0, legsFront: 1.0, bodyRound: 0.5 + p * 0.3, color: '#1a1a1a' };
+  }
+  return { tailLen: 0, legsBack: 1, legsFront: 1, bodyRound: 0.85, color: '#1a1a1a' };
+}
+
+// ============================================================
+// 六c、镜头系统（虚拟摄影机）
+// ============================================================
+
+function getCameraState(t) {
+  let cx = 640, cy = 360, zoom = 1.0;
+  const noiseX = noise(t * 0.3, 1.0) * 2;
+  const noiseY = noise(t * 0.3, 2.0) * 1.5;
+
+  if (t < 8) {
+    // 开场：从全黑淡入，墨滴落下 → 慢慢拉远
+    const p = smoothstep(0, 6, t);
+    zoom = lerp(1.8, 1.0, p);
+    cy = lerp(350, 360, p);
+    cx = 640;
+  } else if (t < 25) {
+    // 蝌蚪游动探索
+    zoom = 1.0;
+    // 跟随蝌蚪位置（平移）
+    const target = getTadpoleTarget(t);
+    cx = lerp(640, target.x, 0.3);
+    cy = lerp(360, target.y, 0.2);
+  } else if (t < 40) {
+    // 第一次误认（鲤鱼）→ 镜头推近
+    const p = smoothstep(25, 30, t);
+    zoom = lerp(1.0, 1.3, p);
+    // 指向鲤鱼区域
+    cx = lerp(getTadpoleTarget(t).x, 200, p * 0.5);
+    cy = lerp(getTadpoleTarget(t).y, 450, p * 0.3);
+  } else if (t < 55) {
+    // 第二次误认（螃蟹）→ 镜头急推
+    const p = smoothstep(40, 43, t);
+    zoom = lerp(1.0, 1.5, p);
+    cx = lerp(640, 350, p * 0.4);
+    cy = lerp(360, 650, p * 0.3);
+    // 43-48s 保持推近
+    if (t > 48) {
+      const p2 = smoothstep(48, 52, t);
+      zoom = lerp(1.5, 1.0, p2);
+    }
+  } else if (t < 70) {
+    // 青蛙出现 → 最安静的一秒
+    const p = smoothstep(55, 60, t);
+    zoom = lerp(1.0, 1.2, p);
+    cx = lerp(640, 900, p * 0.5);
+    cy = lerp(360, 500, p * 0.3);
+  } else if (t < 85) {
+    // 母子相认 → 慢慢拉远
+    const p = smoothstep(70, 75, t);
+    zoom = lerp(1.2, 0.85, p);
+    cx = 770;
+    cy = 430;
+  } else {
+    // 结尾：只剩蛙影
+    const p = smoothstep(85, 90, t);
+    zoom = lerp(0.85, 1.1, p);
+    cx = lerp(770, 640, p);
+    cy = lerp(430, 360, p);
+  }
+
+  return {
+    cx: cx + noiseX,
+    cy: cy + noiseY,
+    zoom: zoom
+  };
+}
+
+// ============================================================
+// 六d、转场系统
+// ============================================================
+
+function getTransitionAlpha(t) {
+  // 返回全屏覆盖层alpha（0=正常, 1=全黑）
+  if (t < 3) {
+    // 黑场淡入
+    return 1.0 - smoothstep(0, 3, t);
+  }
+  if (t < 7) {
+    // 墨滴落下时微微暗
+    return smoothstep(7, 6, t) * 0.15;
+  }
+  if (t >= 87) {
+    // 淡出
+    return smoothstep(87, 90, t);
+  }
+  return 0;
+}
+
+// ============================================================
+// 六e、字幕系统
+// ============================================================
+
+const subtitles = [
+  { start: 2, end: 6, text: '春天来了……' },
+  { start: 8, end: 12, text: '小蝌蚪出生了' },
+  { start: 14, end: 18, text: '妈妈……妈妈在哪里？' },
+  { start: 22, end: 26, text: '你是我的妈妈吗？' },
+  { start: 26, end: 28, text: '不是，我是鲤鱼阿姨' },
+  { start: 32, end: 36, text: '你的妈妈有四条腿' },
+  { start: 38, end: 42, text: '你是我的妈妈吗？' },
+  { start: 42, end: 44, text: '不是，我是螃蟹叔叔' },
+  { start: 48, end: 52, text: '你的妈妈有大眼睛、白肚皮' },
+  { start: 55, end: 58, text: '那是……' },
+  { start: 62, end: 66, text: '妈妈！！' },
+  { start: 68, end: 74, text: '孩子，你长大了' },
+  { start: 78, end: 84, text: '小蝌蚪找妈妈' },
+];
+
+function drawSubtitle(ctx, t) {
+  for (const sub of subtitles) {
+    if (t >= sub.start && t <= sub.end) {
+      const fadeIn = smoothstep(sub.start, sub.start + 0.8, t);
+      const fadeOut = 1.0 - smoothstep(sub.end - 0.8, sub.end, t);
+      const alpha = fadeIn * fadeOut;
+
+      ctx.save();
+      ctx.globalAlpha = alpha * 0.85;
+      ctx.font = '600 28px "Noto Serif SC", "SimSun", "STSong", serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#2a2520';
+
+      // 字幕背景
+      const metrics = ctx.measureText(sub.text);
+      const tw = metrics.width + 40;
+      const tx = W / 2 - tw / 2;
+      const ty = H - 80;
+      ctx.fillStyle = 'rgba(245,240,230,0.7)';
+      ctx.beginPath();
+      ctx.roundRect(tx, ty - 30, tw, 44, 6);
+      ctx.fill();
+
+      // 文字
+      ctx.fillStyle = '#2a2520';
+      ctx.fillText(sub.text, W / 2, ty);
+      ctx.restore();
+      return; // 只显示一条字幕
+    }
+  }
+}
+
+// ============================================================
+// 六f、后处理链
+// ============================================================
+
+// 胶片颗粒（预生成）
+let _grainCanvas = null;
+function generateGrainTexture(w, h) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const cx = c.getContext('2d');
+  seedRandom(555);
+  const imgData = cx.createImageData(w, h);
+  const d = imgData.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const v = sRand() * 255;
+    d[i] = d[i+1] = d[i+2] = v;
+    d[i+3] = 18;
+  }
+  cx.putImageData(imgData, 0, 0);
+  return c;
+}
+
+function applyPostProcessing(ctx, t) {
+  // 暖色调覆盖
+  ctx.save();
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.fillStyle = 'rgba(252,248,235,0.03)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+
+  // 暗角
+  ctx.save();
+  const vg = ctx.createRadialGradient(W/2, H/2, W*0.3, W/2, H/2, W*0.75);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(0.7, 'rgba(0,0,0,0.05)');
+  vg.addColorStop(1, 'rgba(0,0,0,0.25)');
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+
+  // 胶片颗粒
+  if (!_grainCanvas) _grainCanvas = generateGrainTexture(W, H);
+  ctx.save();
+  ctx.globalCompositeOperation = 'overlay';
+  // 每帧稍微偏移颗粒位置
+  const ox = Math.floor(noise(t * 2, 1) * 10);
+  const oy = Math.floor(noise(t * 2, 2) * 10);
+  ctx.drawImage(_grainCanvas, ox, oy);
+  ctx.restore();
+}
+
+// ============================================================
+// 六g、叙事编排 — 基于时间控制场景元素可见性
+// ============================================================
+
+function getSceneVisibility(t) {
+  return {
+    eggs: t < 15,         // 卵泡只在开场景可见
+    tadpole: t >= 4,       // 蝌蚪第4秒出现
+    carp: t >= 20 && t < 50, // 鲤鱼在误认段落出现
+    crab: t >= 35 && t < 55, // 螃蟹在第二段误认出现
+    turtle: t >= 15 && t < 65, // 乌龟作为背景角色
+    frogMother: t >= 55,   // 青蛙妈妈55秒后出现
+    grasses: true,
+    leaves: t >= 10,       // 荷叶稍晚出现
+  };
+}
+
+
+
+</script>
+</body>
+</html>

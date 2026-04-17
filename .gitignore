@@ -4,3 +4,6 @@ node_modules/
 *.mp4
 *.pyc
 .DS_Store
+
+# Large frame directories
+tadpole/frames_v2/
