@@ -5,5 +5,9 @@ node_modules/
 *.pyc
 .DS_Store
 
-# Large frame directories
-tadpole/frames_v2/
+# Large frame directories (render intermediates)
+**/frames_v2/
+**/frames/
+
+# Temp render output
+/tmp/
