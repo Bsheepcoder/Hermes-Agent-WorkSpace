@@ -6,14 +6,14 @@
   <title>Spirit Ink v4.0 — Design Token Engine</title>
   <link rel="stylesheet" href="css/style.css">
 
-  <!-- Three.js import map — works on http:// (local server) or file:// (Chrome 89+) -->
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "./vendor/three/three.module.js",
-      "three/addons/": "./vendor/three/addons/"
-    }
-  }
+  <!-- Three.js core (UMD/IIFE — sets window.THREE) -->
+  <script src="vendor/three/three.min.js"></script>
+  <!-- Postprocessing addons (IIFE — sets window.EffectComposer, etc.) -->
+  <script src="vendor/three/postprocessing.bundle.js"></script>
+
+  <!-- Pack data (IIFE — sets window.__PACK_DATA__) -->
+  <script>
+    window.__PACK_DATA__ = {"pack":{"id":"jarvis-official-v1","name":"J.A.R.V.I.S.","version":"1.0.0","author":"XD Q","description":"钢铁侠贾维斯风格，蓝金色调，全息科技感","tags":["sci-fi","hud","tech"],"engine_version":"4.0","personality":{"k":80,"d":12},"color":{"primary":[0,0.83,1],"secondary":[1,0.84,0],"bg":39321},"bloom":{"strength":0.4,"threshold":0.82}},"base_tokens":{"idle":{"display":"待机呼吸","desc":"默认待机状态，粒子缓缓流动","trigger":"无输入时","category":"state","render":{"style":"energy_flow","color":[0,0.83,1],"scale":1.0,"glow":0.6,"spread":0.05,"bloom":0.3,"speed":0.3},"duration":"loop","priority":0},"joy":{"display":"喜悦","desc":"开心的状态，粒子温暖明亮","trigger":"用户表达开心、高兴、快乐","category":"emotion","render":{"style":"energy_flow","color":[1,0.84,0],"scale":1.3,"glow":0.9,"spread":0.2,"bloom":0.6,"speed":0.8},"duration":"loop","priority":0},"calm":{"display":"平静","desc":"安静的状态，粒子缓慢收缩","trigger":"用户情绪平稳、安静","category":"emotion","render":{"style":"energy_flow","color":[0.2,0.5,0.4],"scale":0.9,"glow":0.4,"spread":-0.05,"bloom":0.2,"speed":0.15},"duration":"loop","priority":0},"think":{"display":"思考","desc":"正在思考，数据雨模式","trigger":"用户提问或AI思考中","category":"action","render":{"style":"data_rain","color":[0.3,0.3,0.8],"scale":1.0,"glow":0.5,"spread":0,"bloom":0.3,"speed":0.5},"duration":"loop","priority":0},"curious":{"display":"好奇","desc":"好奇探索，神经网络模式","trigger":"用户表达好奇、探索、想了解","category":"emotion","render":{"style":"neural","color":[0,0.9,0.8],"scale":1.1,"glow":0.7,"spread":0.1,"bloom":0.4,"speed":0.6},"duration":"loop","priority":0},"alert":{"display":"警觉","desc":"高度关注，扫描模式","trigger":"重要信息、警告、需要注意","category":"state","render":{"style":"scan","color":[1,0.4,0.1],"scale":1.0,"glow":0.8,"spread":0,"bloom":0.5,"speed":1.0},"duration":"loop","priority":0},"warm":{"display":"温暖","desc":"温暖关怀，柔和橙色","trigger":"用户表达感谢、温情、关心","category":"emotion","render":{"style":"energy_flow","color":[1,0.6,0.2],"scale":1.15,"glow":0.7,"spread":0.1,"bloom":0.45,"speed":0.4},"duration":"loop","priority":0},"sad":{"display":"悲伤","desc":"低落情绪，暗淡收缩","trigger":"用户表达难过、悲伤、失望","category":"emotion","render":{"style":"energy_flow","color":[0.2,0.3,0.6],"scale":0.85,"glow":0.3,"spread":-0.15,"bloom":0.2,"speed":0.1},"duration":"loop","priority":0}},"scene_tokens":{"wonder":{"display":"惊叹展开","desc":"震撼的展开，全息网格","trigger":"用户表达惊叹、赞叹、发现","category":"scene","render":{"style":"holo_grid","color":[0,0.83,1],"scale":1.5,"glow":1.0,"spread":0.4,"bloom":0.7,"speed":1.2,"camera_shake":0.15,"hud_scan":true},"duration":5000,"priority":1},"power":{"display":"能量爆发","desc":"能量释放，等离子体模式","trigger":"用户表达兴奋、力量、激情","category":"scene","render":{"style":"plasma","color":[1,0.84,0],"scale":1.8,"glow":1.2,"spread":0.5,"bloom":0.9,"speed":2.0,"camera_shake":0.25},"duration":4000,"priority":1},"shield":{"display":"护盾","desc":"防御保护，同心圆力场","trigger":"用户需要安全感、保护","category":"scene","render":{"style":"shield","color":[0,0.6,1],"scale":1.3,"glow":0.9,"spread":0,"bloom":0.5,"speed":0.5},"duration":5000,"priority":1},"analysis":{"display":"深度分析","desc":"复杂分析中，加速数据雨","trigger":"用户请求复杂分析、深入思考","category":"scene","render":{"style":"data_rain","color":[0,1,0.6],"scale":1.2,"glow":0.8,"spread":0.1,"bloom":0.5,"speed":1.5},"duration":6000,"priority":1},"neural_connect":{"display":"神经连接","desc":"建立连接，神经网络激活","trigger":"用户谈论关系、连接、合作","category":"scene","render":{"style":"neural","color":[0.5,0.3,1],"scale":1.4,"glow":1.0,"spread":0.3,"bloom":0.6,"speed":0.8},"duration":5000,"priority":1}},"ai_rules":"你通过 tokens 字段控制视觉表达。规则：\n- 简单情绪用基础token: idle, joy, calm, think, curious, alert, warm, sad\n- 震撼表达用场景token: wonder, power, shield, analysis, neural_connect\n- 可以同时使用1个基础token + 1个场景token\n- 如果不确定，至少输出一个基础token表达情绪\n- 场景token用于重大转折或特殊时刻，不要滥用","ai_examples":[{"user":"你好","response":{"content":"你好！很高兴见到你","tokens":["joy"]}},{"user":"帮我分析一下这个问题","response":{"content":"好的，让我来分析...","tokens":["think","analysis"]}},{"user":"太厉害了！","response":{"content":"谢谢！","tokens":["joy","wonder"]}},{"user":"我有点难过","response":{"content":"发生了什么？","tokens":["sad"]}}]};
   </script>
 </head>
 <body>
@@ -35,32 +35,28 @@
   <script src="providers.js"></script>
   <script src="js/app.js"></script>
 
-  <!-- Boot (ES module — only place that imports THREE) -->
-  <script type="module">
-    import * as THREE from 'three';
-    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-    import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-    import { CopyShader } from 'three/addons/shaders/CopyShader.js';
-    import { GammaCorrectionShader } from 'three/addons/shaders/GammaCorrectionShader.js';
-
-    // Expose THREE and postprocessing to window scope for the IIFE modules
+  <!-- Boot script (IIFE — uses globals set by scripts above) -->
+  <script>
+    // Expose postprocessing aliases for the IIFE modules
     window.THREE = THREE;
     window.three__postprocessing__EffectComposer = EffectComposer;
     window.three__postprocessing__RenderPass = RenderPass;
     window.three__postprocessing__UnrealBloomPass = UnrealBloomPass;
     window.three__postprocessing__ShaderPass = ShaderPass;
     window.three__postprocessing__OutputPass = function () {
-      // 0.152 doesn't have OutputPass — use GammaCorrectionShader via ShaderPass
-      return new ShaderPass(new GammaCorrectionShader());
+      return new ShaderPass( GammaCorrectionShader );
     };
 
-    // Inline pack data (avoids fetch — works on file:// protocol)
-    try {
-      const packData = {"pack":{"id":"jarvis-official-v1","name":"J.A.R.V.I.S.","version":"1.0.0","author":"XD Q","description":"钢铁侠贾维斯风格，蓝金色调，全息科技感","tags":["sci-fi","hud","tech"],"engine_version":"4.0","personality":{"k":80,"d":12},"color":{"primary":[0,0.83,1],"secondary":[1,0.84,0],"bg":39321},"bloom":{"strength":0.4,"threshold":0.82}},"base_tokens":{"idle":{"display":"待机呼吸","desc":"默认待机状态，粒子缓缓流动","trigger":"无输入时","category":"state","render":{"style":"energy_flow","color":[0,0.83,1],"scale":1.0,"glow":0.6,"spread":0.05,"bloom":0.3,"speed":0.3},"duration":"loop","priority":0},"joy":{"display":"喜悦","desc":"开心的状态，粒子温暖明亮","trigger":"用户表达开心、高兴、快乐","category":"emotion","render":{"style":"energy_flow","color":[1,0.84,0],"scale":1.3,"glow":0.9,"spread":0.2,"bloom":0.6,"speed":0.8},"duration":"loop","priority":0},"calm":{"display":"平静","desc":"安静的状态，粒子缓慢收缩","trigger":"用户情绪平稳、安静","category":"emotion","render":{"style":"energy_flow","color":[0.2,0.5,0.4],"scale":0.9,"glow":0.4,"spread":-0.05,"bloom":0.2,"speed":0.15},"duration":"loop","priority":0},"think":{"display":"思考","desc":"正在思考，数据雨模式","trigger":"用户提问或AI思考中","category":"action","render":{"style":"data_rain","color":[0.3,0.3,0.8],"scale":1.0,"glow":0.5,"spread":0,"bloom":0.3,"speed":0.5},"duration":"loop","priority":0},"curious":{"display":"好奇","desc":"好奇探索，神经网络模式","trigger":"用户表达好奇、探索、想了解","category":"emotion","render":{"style":"neural","color":[0,0.9,0.8],"scale":1.1,"glow":0.7,"spread":0.1,"bloom":0.4,"speed":0.6},"duration":"loop","priority":0},"alert":{"display":"警觉","desc":"高度关注，扫描模式","trigger":"重要信息、警告、需要注意","category":"state","render":{"style":"scan","color":[1,0.4,0.1],"scale":1.0,"glow":0.8,"spread":0,"bloom":0.5,"speed":1.0},"duration":"loop","priority":0},"warm":{"display":"温暖","desc":"温暖关怀，柔和橙色","trigger":"用户表达感谢、温情、关心","category":"emotion","render":{"style":"energy_flow","color":[1,0.6,0.2],"scale":1.15,"glow":0.7,"spread":0.1,"bloom":0.45,"speed":0.4},"duration":"loop","priority":0},"sad":{"display":"悲伤","desc":"低落情绪，暗淡收缩","trigger":"用户表达难过、悲伤、失望","category":"emotion","render":{"style":"energy_flow","color":[0.2,0.3,0.6],"scale":0.85,"glow":0.3,"spread":-0.15,"bloom":0.2,"speed":0.1},"duration":"loop","priority":0}},"scene_tokens":{"wonder":{"display":"惊叹展开","desc":"震撼的展开，全息网格","trigger":"用户表达惊叹、赞叹、发现","category":"scene","render":{"style":"holo_grid","color":[0,0.83,1],"scale":1.5,"glow":1.0,"spread":0.4,"bloom":0.7,"speed":1.2,"camera_shake":0.15,"hud_scan":true},"duration":5000,"priority":1},"power":{"display":"能量爆发","desc":"能量释放，等离子体模式","trigger":"用户表达兴奋、力量、激情","category":"scene","render":{"style":"plasma","color":[1,0.84,0],"scale":1.8,"glow":1.2,"spread":0.5,"bloom":0.9,"speed":2.0,"camera_shake":0.25},"duration":4000,"priority":1},"shield":{"display":"护盾","desc":"防御保护，同心圆力场","trigger":"用户需要安全感、保护","category":"scene","render":{"style":"shield","color":[0,0.6,1],"scale":1.3,"glow":0.9,"spread":0,"bloom":0.5,"speed":0.5},"duration":5000,"priority":1},"analysis":{"display":"深度分析","desc":"复杂分析中，加速数据雨","trigger":"用户请求复杂分析、深入思考","category":"scene","render":{"style":"data_rain","color":[0,1,0.6],"scale":1.2,"glow":0.8,"spread":0.1,"bloom":0.5,"speed":1.5},"duration":6000,"priority":1},"neural_connect":{"display":"神经连接","desc":"建立连接，神经网络激活","trigger":"用户谈论关系、连接、合作","category":"scene","render":{"style":"neural","color":[0.5,0.3,1],"scale":1.4,"glow":1.0,"spread":0.3,"bloom":0.6,"speed":0.8},"duration":5000,"priority":1}},"ai_rules":"你通过 tokens 字段控制视觉表达。规则：\n- 简单情绪用基础token: idle, joy, calm, think, curious, alert, warm, sad\n- 震撼表达用场景token: wonder, power, shield, analysis, neural_connect\n- 可以同时使用1个基础token + 1个场景token\n- 如果不确定，至少输出一个基础token表达情绪\n- 场景token用于重大转折或特殊时刻，不要滥用","ai_examples":[{"user":"你好","response":{"content":"你好！很高兴见到你","tokens":["joy"]}},{"user":"帮我分析一下这个问题","response":{"content":"好的，让我来分析...","tokens":["think","analysis"]}},{"user":"太厉害了！","response":{"content":"谢谢！","tokens":["joy","wonder"]}},{"user":"我有点难过","response":{"content":"发生了什么？","tokens":["sad"]}}]};
-      const flatPack = packData.pack || packData;
+    // Load pack: merge {pack: metadata} with {base_tokens, scene_tokens, ...} into one flat object
+    var raw = window.__PACK_DATA__;
+    var flatPack = Object.assign({}, raw.pack || {}, {
+      base_tokens:  raw.base_tokens,
+      scene_tokens: raw.scene_tokens,
+      ai_rules:     raw.ai_rules,
+      ai_examples:  raw.ai_examples
+    });
 
+    try {
       window.app = new SpiritInk();
       window.app.init({
         canvasContainerId: 'canvas-wrap',
@@ -80,7 +76,7 @@
       window.activateTokens = function (tokens) {
         if (!window.app) return;
         app.tokenEngine.activateTokens(tokens);
-        const allTokens = app._getAllTokensMap();
+        var allTokens = app._getAllTokensMap();
         app.hud.setTokenDisplay(tokens, allTokens);
       };
       window.switchPack = function (id) {
