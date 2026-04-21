@@ -25,6 +25,7 @@
   <div id="hud-overlay" class="si-hud"></div>
 
   <!-- Spirit Ink modules (IIFE, no ES module — run before our boot script) -->
+  <!-- Placed AFTER DOM elements so document.getElementById() works on file:// -->
   <script src="js/spring.js"></script>
   <script src="js/token-engine.js"></script>
   <script src="js/renderer/shader-store.js"></script>
@@ -35,7 +36,7 @@
   <script src="providers.js"></script>
   <script src="js/app.js"></script>
 
-  <!-- Boot script (IIFE — uses globals set by scripts above) -->
+  <!-- Boot script -->
   <script>
     // Expose postprocessing aliases for the IIFE modules
     window.THREE = THREE;
@@ -56,36 +57,45 @@
       ai_examples:  raw.ai_examples
     });
 
-    try {
-      window.app = new SpiritInk();
-      window.app.init({
-        canvasContainerId: 'canvas-wrap',
-        hudContainerId:    'hud-overlay',
-        defaultPackId:     'jarvis',
-        packs: [
-          {
-            id:    'jarvis',
-            label: 'J.A.R.V.I.S.',
-            emoji: '🤖',
-            data:  flatPack
-          }
-        ]
-      });
+    // Wait for DOM to be ready (critical for file:// protocol)
+    function boot() {
+      try {
+        window.app = new SpiritInk();
+        window.app.init({
+          canvasContainerId: 'canvas-wrap',
+          hudContainerId:    'hud-overlay',
+          defaultPackId:     'jarvis',
+          packs: [
+            {
+              id:    'jarvis',
+              label: 'J.A.R.V.I.S.',
+              emoji: '🤖',
+              data:  flatPack
+            }
+          ]
+        });
 
-      // Expose global helpers for console debugging
-      window.activateTokens = function (tokens) {
-        if (!window.app) return;
-        app.tokenEngine.activateTokens(tokens);
-        var allTokens = app._getAllTokensMap();
-        app.hud.setTokenDisplay(tokens, allTokens);
-      };
-      window.switchPack = function (id) {
-        if (window.app) app.switchPack(id);
-      };
-      console.log('Spirit Ink v4.0 booted successfully ✓');
-    } catch (err) {
-      console.error('Spirit Ink: boot failed', err);
-      document.body.innerHTML = '<div style="color:#ff4444;padding:40px;font-family:monospace">Failed to load Spirit Ink: ' + err.message + '</div>';
+        // Expose global helpers for console debugging
+        window.activateTokens = function (tokens) {
+          if (!window.app) return;
+          app.tokenEngine.activateTokens(tokens);
+          var allTokens = app._getAllTokensMap();
+          app.hud.setTokenDisplay(tokens, allTokens);
+        };
+        window.switchPack = function (id) {
+          if (window.app) app.switchPack(id);
+        };
+        console.log('Spirit Ink v4.0 booted successfully ✓');
+      } catch (err) {
+        console.error('Spirit Ink: boot failed', err);
+        document.body.innerHTML = '<div style="color:#ff4444;padding:40px;font-family:monospace">Failed to load Spirit Ink: ' + err.message + '</div>';
+      }
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', boot);
+    } else {
+      boot();
     }
   </script>
 
