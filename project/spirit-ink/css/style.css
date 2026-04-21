@@ -1,0 +1,757 @@
+/* ============================================================
+   Spirit Ink v4.0 — Global Styles & HUD Overlay
+   Zero dependencies. Pure CSS with custom properties.
+   ============================================================ */
+
+/* ────────────────────── Custom Properties ────────────────────── */
+
+:root {
+  --si-cyan:        #00d4ff;
+  --si-gold:        #ffd700;
+  --si-accent:      #0066cc;
+  --si-bg:          #060610;
+  --si-bg-soft:     #0a0a18;
+  --si-text:        rgba(200, 220, 240, 0.7);
+  --si-text-dim:    rgba(0, 212, 255, 0.35);
+  --si-text-faint:  rgba(0, 212, 255, 0.15);
+  --si-border:      rgba(0, 212, 255, 0.1);
+  --si-border-hi:   rgba(0, 212, 255, 0.3);
+  --si-border-gold: rgba(255, 215, 0, 0.5);
+  --si-glass:       rgba(6, 6, 16, 0.80);
+  --si-glass-strong:rgba(6, 6, 16, 0.92);
+  --si-blur:        16px;
+  --si-font-mono:   'Cascadia Code', 'Consolas', 'Courier New', monospace;
+  --si-font-ui:     -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
+  --si-radius:      6px;
+  --si-radius-sm:   4px;
+  --si-z-canvas:    0;
+  --si-z-hud:       5;
+  --si-z-token:     6;
+  --si-z-interactive:10;
+  --si-z-toolbar:   15;
+  --si-z-panel:     20;
+}
+
+/* ────────────────────── Reset & Base ────────────────────── */
+
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--si-bg);
+  font-family: var(--si-font-mono);
+  color: var(--si-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ────────────────────── Canvas ────────────────────── */
+
+.si-canvas-wrap {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  z-index: var(--si-z-canvas);
+}
+
+.si-canvas-wrap canvas {
+  display: block;
+  position: fixed;
+  top: 0;
+  left: 0;
+}
+
+/* ────────────────────── HUD Overlay ────────────────────── */
+
+.si-hud {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: var(--si-z-hud);
+}
+
+/* ────────────────────── Corner Brackets ────────────────────── */
+
+.si-corner {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  border-color: var(--si-border-hi);
+  border-style: solid;
+  border-width: 0;
+  transition: border-color 0.5s ease;
+}
+
+.si-corner--tl {
+  top: 20px;
+  left: 20px;
+  border-top-width: 2px;
+  border-left-width: 2px;
+}
+
+.si-corner--tr {
+  top: 20px;
+  right: 20px;
+  border-top-width: 2px;
+  border-right-width: 2px;
+}
+
+.si-corner--bl {
+  bottom: 60px;
+  left: 20px;
+  border-bottom-width: 2px;
+  border-left-width: 2px;
+}
+
+.si-corner--br {
+  bottom: 60px;
+  right: 20px;
+  border-bottom-width: 2px;
+  border-right-width: 2px;
+}
+
+/* ────────────────────── Arc Reactor Center ────────────────────── */
+
+.si-reactor {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 120px;
+  height: 120px;
+  pointer-events: none;
+}
+
+.si-reactor__ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 212, 255, 0.15);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.si-reactor__ring--1 {
+  width: 30px;
+  height: 30px;
+  animation: si-pulse 2s ease-in-out infinite;
+  border-color: rgba(0, 212, 255, 0.4);
+}
+
+.si-reactor__ring--2 {
+  width: 60px;
+  height: 60px;
+  animation: si-spin 8s linear infinite;
+}
+
+.si-reactor__ring--3 {
+  width: 100px;
+  height: 100px;
+  animation: si-spin-rev 12s linear infinite;
+}
+
+.si-reactor__core {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0, 212, 255, 0.9), rgba(0, 212, 255, 0));
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.6), 0 0 40px rgba(0, 212, 255, 0.3);
+  transition: width 0.3s, height 0.3s, background 0.3s, box-shadow 0.3s;
+}
+
+/* Thinking state — faster pulse */
+.si-reactor--thinking .si-reactor__ring--1 {
+  animation: si-pulse-fast 0.8s ease-in-out infinite;
+}
+
+.si-reactor--thinking .si-reactor__ring--2 {
+  animation: si-spin 4s linear infinite;
+}
+
+.si-reactor--thinking .si-reactor__ring--3 {
+  animation: si-spin-rev 6s linear infinite;
+}
+
+/* ────────────────────── Data Ring (SVG) ────────────────────── */
+
+.si-data-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 200px;
+  height: 200px;
+  animation: si-spin 20s linear infinite;
+  pointer-events: none;
+}
+
+.si-data-ring svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* ────────────────────── Scan Line ────────────────────── */
+
+.si-scan-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.3), transparent);
+  animation: si-scan 4s linear infinite;
+  opacity: 0.3;
+  pointer-events: none;
+  transition: opacity 0.4s ease, height 0.4s ease;
+}
+
+.si-scan-line--active {
+  opacity: 0.7;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.5), rgba(255, 215, 0, 0.3), transparent);
+}
+
+/* ────────────────────── HUD Text Labels ────────────────────── */
+
+.si-hud-text {
+  position: absolute;
+  color: var(--si-text-dim);
+  font-size: 9px;
+  letter-spacing: 2px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.si-hud-text--tl {
+  top: 26px;
+  left: 70px;
+}
+
+.si-hud-text--tr {
+  top: 26px;
+  right: 70px;
+  text-align: right;
+}
+
+.si-hud-text--bl {
+  bottom: 66px;
+  left: 70px;
+}
+
+.si-hud-text--br {
+  bottom: 66px;
+  right: 70px;
+  text-align: right;
+}
+
+/* ────────────────────── Token Display (left sidebar) ────────────────────── */
+
+.si-token-display {
+  position: fixed;
+  top: 50%;
+  left: 20px;
+  transform: translateY(-50%);
+  z-index: var(--si-z-token);
+  pointer-events: none;
+}
+
+.si-token-item {
+  color: rgba(0, 212, 255, 0.4);
+  font-size: 10px;
+  letter-spacing: 1px;
+  padding: 3px 0;
+  opacity: 0.35;
+  transition: opacity 0.5s ease, color 0.5s ease, text-shadow 0.5s ease;
+}
+
+.si-token-item--active {
+  opacity: 1;
+  color: rgba(255, 215, 0, 0.75);
+  text-shadow: 0 0 8px rgba(255, 215, 0, 0.3);
+}
+
+/* ────────────────────── Token Bar (bottom-center pills) ────────────────────── */
+
+.si-token-bar {
+  position: fixed;
+  bottom: 68px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--si-z-hud);
+  display: flex;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.si-token-pill {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: 12px;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  font-family: var(--si-font-mono);
+  color: var(--si-gold);
+  background: rgba(255, 215, 0, 0.08);
+  border: 1px solid rgba(255, 215, 0, 0.2);
+  text-shadow: 0 0 6px rgba(255, 215, 0, 0.3);
+  animation: si-fade-in 0.3s ease;
+}
+
+.si-token-pill--idle {
+  color: var(--si-text-dim);
+  background: rgba(0, 212, 255, 0.04);
+  border-color: var(--si-border);
+  text-shadow: none;
+}
+
+/* ────────────────────── Version Tag ────────────────────── */
+
+.si-version {
+  position: fixed;
+  top: 12px;
+  left: 70px;
+  z-index: var(--si-z-token);
+  color: var(--si-text-faint);
+  font-size: 8px;
+  letter-spacing: 3px;
+  pointer-events: none;
+}
+
+/* ────────────────────── Status Text ────────────────────── */
+
+.si-status {
+  position: fixed;
+  bottom: 62px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--si-z-hud);
+  font-size: 10px;
+  color: var(--si-text-dim);
+  text-align: center;
+  max-width: 80vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.si-status--visible {
+  opacity: 1;
+}
+
+/* ────────────────────── Chat Input Area ────────────────────── */
+
+.si-input-wrap {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--si-z-interactive);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: min(520px, 92vw);
+  pointer-events: auto;
+}
+
+.si-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  background: var(--si-glass);
+  backdrop-filter: blur(var(--si-blur));
+  -webkit-backdrop-filter: blur(var(--si-blur));
+  border: 1px solid var(--si-border);
+  border-radius: var(--si-radius);
+  padding: 8px 12px;
+  transition: border-color 0.3s ease;
+}
+
+.si-input-row:focus-within {
+  border-color: rgba(0, 212, 255, 0.25);
+}
+
+.si-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: rgba(0, 212, 255, 0.75);
+  font-size: 12px;
+  font-family: var(--si-font-mono);
+  letter-spacing: 0.5px;
+  padding: 4px 0;
+}
+
+.si-input::placeholder {
+  color: rgba(0, 212, 255, 0.15);
+}
+
+.si-input:disabled {
+  opacity: 0.3;
+}
+
+.si-send-btn {
+  padding: 5px 14px;
+  border-radius: var(--si-radius-sm);
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  background: rgba(0, 212, 255, 0.06);
+  color: rgba(0, 212, 255, 0.5);
+  cursor: pointer;
+  font-size: 11px;
+  font-family: var(--si-font-mono);
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.si-send-btn:hover {
+  background: rgba(0, 212, 255, 0.12);
+  color: rgba(0, 212, 255, 0.8);
+  border-color: rgba(0, 212, 255, 0.35);
+}
+
+.si-send-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* ────────────────────── Pack Selector Bar ────────────────────── */
+
+.si-pack-bar {
+  position: fixed;
+  top: 50%;
+  right: 20px;
+  transform: translateY(-50%);
+  z-index: var(--si-z-interactive);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.si-pack-btn {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--si-radius);
+  border: 1px solid rgba(0, 212, 255, 0.15);
+  background: var(--si-glass);
+  backdrop-filter: blur(var(--si-blur));
+  -webkit-backdrop-filter: blur(var(--si-blur));
+  color: rgba(0, 212, 255, 0.35);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  font-family: var(--si-font-mono);
+  padding: 0;
+  overflow: visible;
+}
+
+.si-pack-btn:hover {
+  border-color: rgba(0, 212, 255, 0.4);
+  color: rgba(0, 212, 255, 0.7);
+}
+
+.si-pack-btn--active {
+  border-color: var(--si-border-gold);
+  color: rgba(255, 215, 0, 0.8);
+  box-shadow: 0 0 12px rgba(255, 215, 0, 0.15);
+}
+
+.si-pack-btn__label {
+  position: absolute;
+  right: 44px;
+  white-space: nowrap;
+  color: rgba(0, 212, 255, 0.4);
+  font-size: 9px;
+  letter-spacing: 1px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.si-pack-btn:hover .si-pack-btn__label {
+  opacity: 1;
+}
+
+.si-pack-btn__icon {
+  line-height: 1;
+}
+
+/* ────────────────────── Toolbar ────────────────────── */
+
+.si-toolbar {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: var(--si-z-toolbar);
+  display: flex;
+  gap: 6px;
+}
+
+.si-toolbar-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--si-radius);
+  border: 1px solid rgba(0, 212, 255, 0.08);
+  background: rgba(6, 6, 16, 0.5);
+  color: rgba(0, 212, 255, 0.3);
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  pointer-events: auto;
+}
+
+.si-toolbar-btn:hover {
+  color: rgba(0, 212, 255, 0.6);
+  border-color: rgba(0, 212, 255, 0.2);
+}
+
+/* ────────────────────── Config Panel ────────────────────── */
+
+.si-panel {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: var(--si-z-panel);
+  width: 280px;
+  background: var(--si-glass-strong);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(0, 212, 255, 0.06);
+  border-radius: 8px;
+  display: none;
+  flex-direction: column;
+  color: rgba(0, 212, 255, 0.5);
+  font-size: 11px;
+  pointer-events: auto;
+  transform: translateX(110%);
+  opacity: 0;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 0.3s ease;
+}
+
+.si-panel--open {
+  display: flex;
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.si-panel__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(0, 212, 255, 0.04);
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: rgba(0, 212, 255, 0.3);
+}
+
+.si-panel__close {
+  background: none;
+  border: none;
+  color: rgba(0, 212, 255, 0.2);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0;
+  line-height: 1;
+  transition: color 0.2s ease;
+}
+
+.si-panel__close:hover {
+  color: rgba(0, 212, 255, 0.5);
+}
+
+.si-panel__body {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.si-panel__body label {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  margin: 8px 0 3px;
+  color: rgba(0, 212, 255, 0.3);
+}
+
+.si-panel__body label:first-child {
+  margin-top: 0;
+}
+
+.si-panel__input,
+.si-panel__select {
+  width: 100%;
+  background: rgba(0, 212, 255, 0.03);
+  border: 1px solid rgba(0, 212, 255, 0.06);
+  color: rgba(0, 212, 255, 0.6);
+  padding: 6px 8px;
+  border-radius: var(--si-radius-sm);
+  font-size: 10px;
+  outline: none;
+  font-family: var(--si-font-mono);
+  transition: border-color 0.2s ease;
+}
+
+.si-panel__input:focus,
+.si-panel__select:focus {
+  border-color: rgba(0, 212, 255, 0.15);
+}
+
+.si-panel__select option {
+  background: var(--si-bg-soft);
+}
+
+.si-panel__row {
+  display: flex;
+  flex-direction: column;
+}
+
+.si-panel__btn-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.si-panel__btn {
+  padding: 5px 12px;
+  border-radius: var(--si-radius-sm);
+  border: 1px solid rgba(0, 212, 255, 0.1);
+  background: rgba(0, 212, 255, 0.06);
+  color: rgba(0, 212, 255, 0.5);
+  cursor: pointer;
+  font-size: 10px;
+  font-family: var(--si-font-mono);
+  transition: all 0.15s ease;
+}
+
+.si-panel__btn:hover {
+  background: rgba(0, 212, 255, 0.12);
+  border-color: rgba(0, 212, 255, 0.2);
+}
+
+/* ────────────────────── Animations ────────────────────── */
+
+@keyframes si-pulse {
+  0%, 100% {
+    opacity: 0.4;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+}
+
+@keyframes si-pulse-fast {
+  0%, 100% {
+    opacity: 0.5;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.15);
+  }
+}
+
+@keyframes si-spin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to   { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+@keyframes si-spin-rev {
+  from { transform: translate(-50%, -50%) rotate(360deg); }
+  to   { transform: translate(-50%, -50%) rotate(0deg); }
+}
+
+@keyframes si-scan {
+  0%   { top: 0; }
+  100% { top: 100%; }
+}
+
+@keyframes si-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ────────────────────── Responsive ────────────────────── */
+
+/* Hide chat input on very narrow screens */
+@media (max-width: 599px) {
+  .si-input-wrap {
+    display: none;
+  }
+  .si-status {
+    bottom: 16px;
+  }
+  .si-token-bar {
+    bottom: 16px;
+  }
+  .si-hud-text--bl,
+  .si-hud-text--br {
+    bottom: 56px;
+  }
+  .si-corner--bl,
+  .si-corner--br {
+    bottom: 10px;
+  }
+}
+
+/* Compact pack bar on medium screens */
+@media (max-width: 768px) {
+  .si-pack-btn {
+    width: 30px;
+    height: 30px;
+    font-size: 12px;
+  }
+  .si-pack-btn__label {
+    display: none;
+  }
+  .si-panel {
+    width: 240px;
+  }
+  .si-token-display {
+    display: none;
+  }
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .si-scan-line,
+  .si-reactor__ring,
+  .si-data-ring {
+    animation: none !important;
+  }
+  .si-token-pill {
+    animation: none !important;
+  }
+}

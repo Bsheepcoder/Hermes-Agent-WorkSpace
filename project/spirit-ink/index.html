@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spirit Ink v4.0 — Design Token Engine</title>
+  <link rel="stylesheet" href="css/style.css">
+
+  <!-- ES Module import map for Three.js -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.152.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.152.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+
+  <!-- WebGL Canvas Container -->
+  <div id="canvas-wrap" class="si-canvas-wrap"></div>
+
+  <!-- HUD Overlay -->
+  <div id="hud-overlay" class="si-hud"></div>
+
+  <!-- Spirit Ink modules (IIFE, no ES module — run before our boot script) -->
+  <script src="js/spring.js"></script>
+  <script src="js/token-engine.js"></script>
+  <script src="js/renderer/shader-store.js"></script>
+  <script src="js/renderer/particle.js"></script>
+  <script src="js/renderer/hud.js"></script>
+  <script src="js/ai/prompt-builder.js"></script>
+  <script src="js/ai/response-parser.js"></script>
+  <script src="providers.js"></script>
+  <script src="js/app.js"></script>
+
+  <!-- Boot (ES module — only place that imports THREE) -->
+  <script type="module">
+    import * as THREE from 'three';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+    import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+    import { CopyShader } from 'three/addons/shaders/CopyShader.js';
+    import { GammaCorrectionShader } from 'three/addons/shaders/GammaCorrectionShader.js';
+
+    // Expose THREE and postprocessing to window scope for the IIFE modules
+    window.THREE = THREE;
+    window.three__postprocessing__EffectComposer = EffectComposer;
+    window.three__postprocessing__RenderPass = RenderPass;
+    window.three__postprocessing__UnrealBloomPass = UnrealBloomPass;
+    window.three__postprocessing__ShaderPass = ShaderPass;
+    window.three__postprocessing__OutputPass = function () {
+      // 0.152 doesn't have OutputPass — use GammaCorrectionShader via ShaderPass
+      return new ShaderPass(new GammaCorrectionShader());
+    };
+
+    // Load the default token pack and start the app
+    try {
+      const res = await fetch('packs/jarvis-v1.json');
+      const packData = await res.json();
+      const flatPack = packData.pack || packData;
+
+      window.app = new SpiritInk();
+      window.app.init({
+        canvasContainerId: 'canvas-wrap',
+        hudContainerId:    'hud-overlay',
+        defaultPackId:     'jarvis',
+        packs: [
+          {
+            id:    'jarvis',
+            label: 'J.A.R.V.I.S.',
+            emoji: '🤖',
+            data:  flatPack
+          }
+        ]
+      });
+
+      // Expose global helpers for console debugging
+      window.activateTokens = function (tokens) {
+        if (!window.app) return;
+        app.tokenEngine.activateTokens(tokens);
+        const allTokens = app._getAllTokensMap();
+        app.hud.setTokenDisplay(tokens, allTokens);
+      };
+      window.switchPack = function (id) {
+        if (window.app) app.switchPack(id);
+      };
+      console.log('Spirit Ink v4.0 booted successfully ✓');
+    } catch (err) {
+      console.error('Spirit Ink: boot failed', err);
+      document.body.innerHTML = '<div style="color:#ff4444;padding:40px;font-family:monospace">Failed to load Spirit Ink: ' + err.message + '</div>';
+    }
+  </script>
+
+</body>
+</html>
