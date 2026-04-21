@@ -51,6 +51,10 @@
     fragmentShader: /* glsl */`
       uniform sampler2D tDiffuse;
       varying vec2 vUv;
+      vec4 LinearTosRGB( in vec4 value ) {
+        return vec4( mix( pow( value.rgb, vec3( 0.41666 ) ) * 1.055 - vec3( 0.055 ),
+          value.rgb * 12.92, vec3( lessThanEqual( value.rgb, vec3( 0.0031308 ) ) ) ), value.a );
+      }
       void main() {
         vec4 tex = texture2D( tDiffuse, vUv );
         gl_FragColor = LinearTosRGB( tex );
@@ -74,6 +78,7 @@
         gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
       }`,
     fragmentShader: /* glsl */`
+      #include <common>
       uniform sampler2D tDiffuse;
       uniform vec3 defaultColor;
       uniform float defaultOpacity;
@@ -82,7 +87,7 @@
       varying vec2 vUv;
       void main() {
         vec4 texel = texture2D( tDiffuse, vUv );
-        float v = luminance( texel.xyz );
+        float v = linearToRelativeLuminance( texel.xyz );
         vec4 outputColor = vec4( defaultColor.rgb, defaultOpacity );
         float alpha = smoothstep( luminosityThreshold, luminosityThreshold + smoothWidth, v );
         gl_FragColor = mix( outputColor, texel, alpha );
