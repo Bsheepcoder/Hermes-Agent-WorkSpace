@@ -218,5 +218,33 @@
     ],
     "draft_media_id": "c7B1dkigWiWaY826_njoE4oqaoZYNf87QCJc8-P4u2fLh3lx0VUl06zySgbjPm6A",
     "status": "published"
+  },
+  {
+    "date": "2026-04-22",
+    "topic": "从穿衣到如厕：孩子生活自理能力分阶培养指南",
+    "keywords": [
+      "生活自理能力",
+      "穿衣训练",
+      "如厕训练",
+      "分步教学法",
+      "入园准备",
+      "ADL训练"
+    ],
+    "cards": [
+      "0422-selfcare-1.html",
+      "0422-selfcare-2.html",
+      "0422-selfcare-3.html",
+      "0422-selfcare-4.html",
+      "0422-selfcare-5.html"
+    ],
+    "media_ids": [
+      "c7B1dkigWiWaY826_njoE6dEebeiarpmsbChJa4HWh7A1SsdWR4s3seshG9TG-hk",
+      "c7B1dkigWiWaY826_njoE3RUiRrj1Nt1_dU2JcjuCLDq4V2A-wc-gVjXkofYtRki",
+      "c7B1dkigWiWaY826_njoEzdFcZ4oam4In0eO0SkpmCcc8k-4uxygOnJC_KzDDsLy",
+      "c7B1dkigWiWaY826_njoE4vW3p8orKs4Lbrk7ugREQ98dhZkQoy1N16GVyBUqX6y",
+      "c7B1dkigWiWaY826_njoE_FneO3lAO3QBTEaDlsFAOBdKpBzFf1Mt2zb8RdX4cyx"
+    ],
+    "draft_media_id": "c7B1dkigWiWaY826_njoE3bl9WISJpUTCNVXXJV7fhv9_bBAQ7Edu6ym3pF8Ab8b",
+    "status": "published"
   }
 ]
