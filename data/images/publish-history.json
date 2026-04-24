@@ -274,5 +274,32 @@
     ],
     "draft_media_id": "c7B1dkigWiWaY826_njoE2dFzX9FbBMS2u9MGdhpF5OTm7ZY1ctfFXudqjttjgHa",
     "status": "published"
+  },
+  {
+    "date": "2026-04-24",
+    "topic": "分不清左右、总把鞋穿反？——视觉空间感知训练指南",
+    "keywords": [
+      "视觉空间感知",
+      "空间概念",
+      "左右分辨",
+      "图形认知",
+      "方向感训练"
+    ],
+    "cards": [
+      "0424-visual-1.html",
+      "0424-visual-2.html",
+      "0424-visual-3.html",
+      "0424-visual-4.html",
+      "0424-visual-5.html"
+    ],
+    "media_ids": [
+      "c7B1dkigWiWaY826_njoE3MX07gzgFR-4PnaG5iV13JialraRNYqMzLHUpjCiK8f",
+      "c7B1dkigWiWaY826_njoE63Zu90b9kp2ZS06MNxVLPVGwHcCzBa3mgW8a_E2QjwD",
+      "c7B1dkigWiWaY826_njoExHHRl8e384UZblomDeGrs-Ge_DStAW9SN2A8gOPZmcv",
+      "c7B1dkigWiWaY826_njoE503psML1oqhfiXQxZJHYSXI4UEjSHElJqEbup2-LeSm",
+      "c7B1dkigWiWaY826_njoE_SGDvG6-Nljf6dyaiCstUwzikt-Fcgt1dfqoibrBplc"
+    ],
+    "draft_media_id": "c7B1dkigWiWaY826_njoE6RHF09jOwB35LKQrIvhjLCqDlLnAneJGN873PCgxzXa",
+    "status": "published"
   }
 ]
